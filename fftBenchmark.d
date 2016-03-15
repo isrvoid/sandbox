@@ -31,7 +31,8 @@ void main(string[] args)
         auto fft = fftObj.fft!(float, float[])(samples);
     }
     auto elapsed = MonoTime.currTime - start;
-    writeln(elapsed);
+    auto sps = cast(double) periodCount * sampleCount / elapsed.total!"usecs";
+    writeln(sps, " MSPS");
 }
 
 @safe:
