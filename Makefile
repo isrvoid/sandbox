@@ -15,6 +15,9 @@ endif
 
 BUILDDIR := build
 
+$(BUILDDIR)/fftlut: fftLutComparison.d
+	@dmd $(DFLAGS) $^ -of$@
+
 $(BUILDDIR)/fftbench: fftBenchmark.d
 	@dmd $(DFLAGS) $^ -of$@
 
