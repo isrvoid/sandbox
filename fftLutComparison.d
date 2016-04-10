@@ -8,6 +8,13 @@ enum absCorrectionFactor = 2.0 / sampleCount;
 
 void main()
 {
+    auto dcPropLut = getDcCoupling(&getFundamental, 0.1, 10);
+    auto dcPropFft = getDcCoupling(&getFundamentalFromFft, 0.1, 10);
+
+    writeln("sin-cos-LUT DC coupling errors:");
+    writeln(dcPropLut);
+    writeln("FFT DC coupling errors:");
+    writeln(dcPropFft);
 }
 
 auto getSamples(double abs, double arg = 0.0, double periods = 1.0)
@@ -107,6 +114,14 @@ unittest
 
 unittest
 {
+    auto f = getFundamental(getSamples(42.0, 2.34 * PI));
+    auto expected = fromPolar(42.0, 2.34 * PI - PI_2);
+    assert(approxEqual(expected.re, f.re));
+    assert(approxEqual(expected.im, f.im));
+}
+
+unittest
+{
     foreach(i; 0 .. 10)
     {
         auto startArg = 2.0 * PI / 10 * i;
@@ -116,4 +131,51 @@ unittest
         assert(approxEqual(arg(fftFund), arg(fund)));
         assert(approxEqual(abs(fftFund) * absCorrectionFactor, abs(fund)));
     }
+}
+
+auto getFundamentalFromFft(double[] samples)
+{
+    auto fund = samples.fft()[1];
+    return fromPolar(abs(fund) * absCorrectionFactor, arg(fund));
+}
+
+unittest
+{
+    auto f = getFundamentalFromFft(getSamples(42.0, -2.34 * PI));
+    auto expected = fromPolar(42.0, -2.34 * PI - PI_2);
+    assert(approxEqual(expected.re, f.re));
+    assert(approxEqual(expected.im, f.im));
+}
+
+auto getDcCoupling(Complex!double function(double[] samples) getFund, double limit = 0.1, uint steps = 10)
+{
+    enum argSteps = 32;
+    enum expectedAbs = 1.0;
+    auto dcCoupling = new double[](steps);
+    foreach (i, ref dcProp; dcCoupling)
+    {
+        auto maxAbsError = 0.0;
+        immutable dcOffset = limit / steps * (i + 1);
+        foreach (j; 0 .. argSteps)
+        {
+            immutable arg = 2.0 * PI / argSteps * j;
+            immutable expected = fromPolar(expectedAbs, arg - PI_2);
+            auto samples = getSamples(expectedAbs, arg);
+            samples[] += dcOffset;
+            auto fund = getFund(samples);
+            auto absError = abs(fund - expected);
+            if (absError > maxAbsError)
+                maxAbsError = absError;
+        }
+        dcProp = maxAbsError / dcOffset;
+    }
+
+    return dcCoupling;
+}
+
+unittest
+{
+    auto steps = 10;
+    auto prop = getDcCoupling(&getFundamentalFromFft, 0.5, steps);
+    assert(steps == prop.length);
 }
