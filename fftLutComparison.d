@@ -10,12 +10,12 @@ void main()
 {
 }
 
-auto getSamples(double abs, double arg = 0.0)
+auto getSamples(double abs, double arg = 0.0, double periods = 1.0)
 {
     auto res = new double[](sampleCount);
     foreach (i, ref s; res)
     {
-        auto x = 2.0 * PI / sampleCount * i + arg;
+        auto x = periods * 2.0 * PI / sampleCount * i + arg;
         s = abs * sin(x);
     }
     return res;
@@ -33,9 +33,32 @@ unittest
 
 unittest
 {
-    auto fft = getSamples(42.0, PI_4).fft();
+    auto fft = getSamples(42.0, 0.123 * PI).fft();
     assert(approxEqual(42.0, abs(fft[1]) * absCorrectionFactor));
-    assert(approxEqual(-PI_4, arg(fft[1])));
+    assert(approxEqual(0.123 * PI - PI_2, arg(fft[1])));
+}
+
+unittest
+{
+    auto fft = getSamples(42.0, 1.23 * PI, 3.0).fft();
+    assert(approxEqual(42.0, abs(fft[3]) * absCorrectionFactor));
+    assert(approxEqual(1.23 * PI - PI_2, arg(fft[3])));
+}
+
+unittest
+{
+    auto testSignal = new double[](sampleCount);
+    testSignal[] = 0.5 + getSamples(7.0, -PI)[] + getSamples(3.0, -PI * 0.8, 6.0)[];
+    auto fft = fft(testSignal);
+
+    assert(approxEqual(0.0, fft[0].im));
+    assert(approxEqual(0.5 * sampleCount, fft[0].re));
+
+    assert(approxEqual(7.0, abs(fft[1]) * absCorrectionFactor));
+    assert(approxEqual(2.0 * PI - PI - PI_2, arg(fft[1])));
+
+    assert(approxEqual(3.0, abs(fft[6]) * absCorrectionFactor));
+    assert(approxEqual(2.0 * PI - PI * 0.8 - PI_2, arg(fft[6])));
 }
 
 auto getFundamental(double[] samples)
