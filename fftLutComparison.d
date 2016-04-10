@@ -8,13 +8,23 @@ enum absCorrectionFactor = 2.0 / sampleCount;
 
 void main()
 {
-    auto dcPropLut = getDcCoupling(&getFundamental, 0.1, 10);
-    auto dcPropFft = getDcCoupling(&getFundamentalFromFft, 0.1, 10);
+    auto dcCouplingLut = getDcCoupling(&getFundamental, 0.1, 10);
+    auto harmonicCouplingLut = getHarmonicCoupling(&getFundamental);
 
-    writeln("sin-cos-LUT DC coupling errors:");
-    writeln(dcPropLut);
-    writeln("FFT DC coupling errors:");
-    writeln(dcPropFft);
+    auto dcCouplingFft = getDcCoupling(&getFundamentalFromFft, 0.1, 10);
+    auto harmonicCouplingFft = getHarmonicCoupling(&getFundamentalFromFft);
+
+    writeln("sin-cos-LUT coupling --------");
+    writeln("DC:");
+    writeln(dcCouplingLut);
+    writeln("harmonic:");
+    writeln(harmonicCouplingLut);
+    writeln();
+    writeln("FFT coupling ----------------");
+    writeln("DC:");
+    writeln(dcCouplingFft);
+    writeln("harmonic:");
+    writeln(harmonicCouplingFft);
 }
 
 auto getSamples(double abs, double arg = 0.0, double periods = 1.0)
@@ -147,12 +157,14 @@ unittest
     assert(approxEqual(expected.im, f.im));
 }
 
-auto getDcCoupling(Complex!double function(double[] samples) getFund, double limit = 0.1, uint steps = 10)
+alias getFundamentalFunc = Complex!double function(double[] samples);
+
+auto getDcCoupling(getFundamentalFunc getFund, double limit = 0.1, uint steps = 10)
 {
     enum argSteps = 32;
     enum expectedAbs = 1.0;
     auto dcCoupling = new double[](steps);
-    foreach (i, ref dcProp; dcCoupling)
+    foreach (i, ref dcCoup; dcCoupling)
     {
         auto maxAbsError = 0.0;
         immutable dcOffset = limit / steps * (i + 1);
@@ -167,7 +179,7 @@ auto getDcCoupling(Complex!double function(double[] samples) getFund, double lim
             if (absError > maxAbsError)
                 maxAbsError = absError;
         }
-        dcProp = maxAbsError / dcOffset;
+        dcCoup = maxAbsError / dcOffset;
     }
 
     return dcCoupling;
@@ -176,6 +188,43 @@ auto getDcCoupling(Complex!double function(double[] samples) getFund, double lim
 unittest
 {
     auto steps = 10;
-    auto prop = getDcCoupling(&getFundamentalFromFft, 0.5, steps);
-    assert(steps == prop.length);
+    auto dc = getDcCoupling(&getFundamentalFromFft, 0.5, steps);
+    assert(steps == dc.length);
+}
+
+auto getHarmonicCoupling(getFundamentalFunc getFund)
+{
+    import std.array : Appender;
+    enum argSteps = 16;
+    enum noiseAmp = 0.1;
+
+    Appender!(double[]) coupling;
+    foreach (harmonic; 2 .. sampleCount / 2)
+    {
+        auto maxError = 0.0;
+        foreach (j; 0 .. argSteps)
+        {
+            auto signalArg = 2.0 * PI / argSteps * j;
+            auto expected = fromPolar(1.0, signalArg - PI_2);
+            auto signal = getSamples(1.0, signalArg);
+            foreach (k; 0 .. argSteps)
+            {
+                auto noiseArg = 2.0 * PI / argSteps * k;
+                auto noise = getSamples(noiseAmp, noiseArg, harmonic);
+                signal[] += noise[];
+                auto fund = getFund(signal);
+                auto error = abs(fund - expected);
+                if (error > maxError)
+                    maxError = error;
+            }
+        }
+        coupling.put(maxError / noiseAmp);
+    }
+    return coupling.data;
+}
+
+unittest
+{
+    auto hc = getHarmonicCoupling(&getFundamental);
+    assert(sampleCount / 2 - 2 == hc.length);
 }
